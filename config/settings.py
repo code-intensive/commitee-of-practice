@@ -1,8 +1,7 @@
+import os
 import sys
 from datetime import timedelta
-from os import getenv
 from pathlib import Path
-import os
 
 from dotenv import load_dotenv
 
@@ -21,17 +20,21 @@ sys.path.insert(0, APPS_DIR)
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = getenv("DJANGO_SECRET_KEY")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = bool(getenv("DJANGO_DEBUG", False))
+DEBUG = os.getenv("DJANGO_DEBUG", False) and "RENDER" not in os.environ
 
 # Since allowed hosts should hold a list of hosts, the list comprehension
 # helps to handle that, defaulting to an empty list if env key is missing
 ALLOWED_HOSTS = [
-    allowed_host.strip() for allowed_host in getenv("ALLOWED_HOSTS", "").split(",")
+    allowed_host.strip() for allowed_host in os.getenv("ALLOWED_HOSTS", "").split(",")
 ]
 
+RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 # Application definition
 
@@ -49,6 +52,7 @@ INSTALLED_APPS = [
     "drf_spectacular_sidecar",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "core",
     "authentication",
     "users",
     "forums",
@@ -143,12 +147,20 @@ USE_L10N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/3.1/howto/static-files/
+# https://docs.djangoproject.com/en/4.1/howto/static-files/
 
+# This setting tells Django at which URL static files are going to be served to the user.
+# Here, they well be accessible at your-domain.onrender.com/static/...
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR.joinpath("static").as_posix()
+# Following settings only make sense on production and may break development environments.
+if not DEBUG:  # Tell Django to copy statics to the `static` directory
+    # in your application directory on Render.
+    # Turn on WhiteNoise storage backend that takes care of compressing static files
+    # and creating unique names for each version so they can safely be cached forever.
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    MIDDLEWARE.insert(2, "whitenoise.middleware.WhiteNoiseMiddleware")
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR.joinpath("media").as_posix()
@@ -234,6 +246,7 @@ SPECTACULAR_SETTINGS = {
     "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
     "SERVERS": [
         {"url": "http://127.0.0.1:8000", "description": "Local Development server"},
+        {"url": "https://cop-api.onrender.com", "description": "Render server"},
     ],
     "SWAGGER_UI_DIST": "SIDECAR",
     "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
@@ -299,18 +312,36 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "apikey"
 EMAIL_HOST = "smtp.sendgrid.net"
-SENDGRID_API_KEY = getenv("SENDGRID_API_KEY")
-DEFAULT_FROM_EMAIL = getenv("SENDGRID_DEFAULT_FROM_EMAIL")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+DEFAULT_FROM_EMAIL = os.getenv("SENDGRID_DEFAULT_FROM_EMAIL")
 EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
-SENDGRID_SANDBOX_MODE_IN_DEBUG = bool(getenv("SENDGRID_SANDBOX_MODE_IN_DEBUG", False))
-SENDGRID_ECHO_TO_STDOUT = getenv("SENDGRID_ECHO_TO_STDOUT")
+SENDGRID_SANDBOX_MODE_IN_DEBUG = False
+SENDGRID_ECHO_TO_STDOUT = False
 SUPPORT_EMAIL = "<support@cop.org>"
 PLATFORM_TEAM = "<core.team@cop.org>"
 PLATFORM_NAME = "PHEM Community of Practice"
-SERVER_EMAIL = getenv("SERVER_EMAIL")
+SERVER_EMAIL = os.getenv("SERVER_EMAIL")
 EMAIL_TIMEOUT = 5
 ADMINS = [
     ("code-intensive", "justtega97@gmail.com"),
     ("alhaji-dalhatu", "mohmusa@gmail.com"),
 ]
 MANAGERS = ADMINS
+
+DEFAULT_SUPERUSER_DETAILS = {
+    "username": os.getenv("RENDER_USERNAME", "cop"),
+    "password": os.getenv("RENDER_PASWORD", "cop914"),
+    "email": os.getenv("RENDER_EMAIL", "superuser@cop.com"),
+    "first_name": "super",
+    "last_name": "user",
+    "username": "cop",
+    "password": "c0p914",
+    "role": "admin",
+    "is_superuser": True,
+    "is_active": True,
+    "is_verified": True,
+    "phone": "+2349038748333",
+    "designation": "Admin Building",
+    "current_state": "Best",
+    "gender": "male",
+}
